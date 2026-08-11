@@ -97,7 +97,7 @@ def call_muapi_llm(prompt: str) -> str:
 
 
 def _fix_truncated_json(text: str) -> str:
-    """Fix JSON that was truncated mid-response by closing open strings."""
+    """Fix JSON that was truncated mid-response by closing unclosed strings."""
     # Strip markdown fences
     text = text.strip()
     if text.startswith('```'):
@@ -106,15 +106,39 @@ def _fix_truncated_json(text: str) -> str:
         text = text[:-3]
     text = text.strip()
     
-    # Find last complete " and truncate everything after
-    last_quote = text.rfind('"')
-    if last_quote != -1:
-        text = text[:last_quote + 1]
+    # Find if we're inside an unclosed string
+    i = len(text) - 1
+    while i >= 0 and text[i] in ' \t\n\r':
+        i -= 1
+    
+    if i >= 0:
+        quote_count = 0
+        escape = False
+        for j in range(i + 1):
+            ch = text[j]
+            if escape:
+                escape = False
+                continue
+            if ch == '\\':
+                escape = True
+                continue
+            if ch == '"':
+                quote_count += 1
+        
+        # Odd number of quotes means we're inside an unclosed string
+        if quote_count % 2 == 1:
+            # Find the opening quote and close the string
+            for j in range(i, -1, -1):
+                if text[j] == '"':
+                    text = text[:j + 1] + '"'
+                    break
     
     # Add missing closing braces/brackets
-    while text.count('{') > text.count('}'):
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    for _ in range(open_braces):
         text += '}'
-    while text.count('[') > text.count(']'):
+    for _ in range(open_brackets):
         text += ']'
     
     return text
