@@ -82,13 +82,12 @@ def call_custom_llm(prompt: str) -> str:
         temperature=0.7,
         messages=[{"role": "user", "content": prompt}],
     )
-    # DEBUG: log raw response
-    if DEBUG_LLM_OUTPUT:
-        import os as _os
-        raw_text = response.choices[0].message.content or ""
-        print(f"[llm/DEBUG] model={model} tokens={response.usage.total_tokens if response.usage else '?'}: {raw_text[:300]}...", flush=True)
-        return raw_text
-    return response.choices[0].message.content or ""
+    result = response.choices[0].message.content or ""
+    # DEBUG: show raw response on first line for diagnostics
+    import os as _os
+    if _os.environ.get("SHOW_LLM_OUTPUT", "true").lower() != "false":
+        print(f"[llm/RAW] model={model} tokens={getattr(response.usage, 'total_tokens', '?')}: {result[:200]}{'...' if len(result) > 200 else ''}", flush=True)
+    return result
 
 
 def call_local_llm(prompt: str) -> str:
