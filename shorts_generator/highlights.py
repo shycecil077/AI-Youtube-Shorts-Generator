@@ -98,49 +98,62 @@ def call_muapi_llm(prompt: str) -> str:
 
 def _fix_truncated_json(text: str) -> str:
     """Fix JSON that was truncated mid-response by closing open strings/braces."""
-    # Find last closing brace
-    last_brace = text.rfind("}")
-    if last_brace == -1:
-        return text
+    # Strip markdown fences
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
     
-    # Work backwards from last brace to close any open structures
-    result = text[:last_brace + 1]
+    # If no closing brace, find last valid char and add one
+    if "}" not in text and "]" not in text:
+        # Find last non-whitespace char
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] not in ' \t\n\r':
+                text = text[:i+1] + '"}'
+                return text
+        return text + "{}"
     
-    # Count unclosed quotes after last complete token
-    in_string = False
-    escape_next = False
-    for i in range(len(result) - 1, -1, -1):
-        ch = result[i]
-        if escape_next:
-            escape_next = False
+    # Add missing closing brace if needed
+    brace_count = text.count("{") - text.count("}")
+    bracket_count = text.count("[") - text.count("]")
+    while brace_count > 0 or bracket_count > 0:
+        if brace_count > 0:
+            text += "}"
+            brace_count -= 1
+        elif bracket_count > 0:
+            text += "]"
+            bracket_count -= 1
+    
+    # Now fix unclosed strings by finding the last complete " and closing after it
+    # Strategy: find last " that's not escaped, close string, then ensure proper closing
+    last_quote = -1
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] == '\\':
             continue
-        if ch == '\\':
-            escape_next = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-        if not in_string:
+        if text[i] == '"':
+            last_quote = i
             break
     
-    # If we're inside a string, close it
-    if in_string:
-        # Find the key this string belongs to
-        # Go back to find the colon after a key
-        search_from = len(result) - 1
-        while search_from >= 0 and result[search_from] in ' \t\n\r':
-            search_from -= 1
-        # We should be at : or ,
-        if search_from >= 0 and result[search_from] == ':':
-            # Find the key by going back to find "
-            key_start = search_from
-            while key_start >= 0 and result[key_start] != '"':
-                key_start -= 1
-            if key_start >= 0:
-                # Close the string value
-                result = result[:search_from + 1] + '"}'
-                return result
+    if last_quote != -1:
+        # Check if there's content after the last quote that needs closing
+        after_quote = text[last_quote + 1:].strip()
+        if after_quote and after_quote != "}":
+            # There's dangling content after the last quote - truncate it
+            text = text[:last_quote + 1]
     
-    return result
+    # Ensure we end with proper closing
+    text = text.rstrip()
+    while text and text[-1] not in '}]':
+        text = text[:-1]
+    text = text.rstrip()
+    
+    # Count remaining unclosed structures
+    brace_count = text.count("{") - text.count("}")
+    bracket_count = text.count("[") - text.count("]")
+    if brace_count > 0:
+        text += "}" * brace_count
+    if bracket_count > 0:
+        text += "]" * bracket_count
+    
+    return text
 
 
 def _parse_json_loose(raw: str) -> Dict:
@@ -162,22 +175,20 @@ def _parse_json_loose(raw: str) -> Dict:
     except json.JSONDecodeError:
         pass
     
-    # Fallback: extract highlights array manually
+    # Fallback: extract highlights array
     arr_start = text.find('["highlights"')
     if arr_start == -1:
         arr_start = text.find('"highlights"')
     if arr_start != -1:
         bracket = text.find('[', arr_start)
         if bracket != -1:
-            brace_end = text.rfind("}")
-            if brace_end != -1:
-                segment = text[bracket:brace_end + 1]
-                segment = _fix_truncated_json(segment)
-                try:
-                    parsed = json.loads(segment)
-                    return {"highlights": parsed if isinstance(parsed, list) else parsed.get("highlights", [])}
-                except json.JSONDecodeError:
-                    pass
+            segment = text[bracket:]
+            segment = _fix_truncated_json(segment)
+            try:
+                parsed = json.loads(segment)
+                return {"highlights": parsed if isinstance(parsed, list) else parsed.get("highlights", [])}
+            except json.JSONDecodeError:
+                pass
     
     raise
 
