@@ -44,6 +44,7 @@ else:
 CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "").strip()
 CUSTOM_BASE_URL = os.getenv("CUSTOM_LLM_BASE_URL", "").strip()
 CUSTOM_MODEL = os.getenv("CUSTOM_MODEL", "").strip()
+DEBUG_LLM_OUTPUT = os.getenv("DEBUG_LLM_OUTPUT", "false").strip().lower() == "true"
 
 
 def require_api_key() -> str:

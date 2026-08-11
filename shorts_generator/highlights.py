@@ -222,6 +222,9 @@ def call_highlight_api(
 
     for attempt in range(1, MAX_HIGHLIGHT_API_ATTEMPTS + 1):
         raw = llm_fn(prompt)
+        # DEBUG: log raw output jika DEBUG_LLM_OUTPUT=True
+        if os.environ.get("DEBUG_LLM_OUTPUT", "false").lower() == "true":
+            print(f"[highlights/DEBUG] attempt {attempt}: {raw[:500]}...", flush=True)
         try:
             parsed = _parse_json_loose(raw)
             highlights = _sanitize_highlights(parsed.get("highlights"), duration=duration)
