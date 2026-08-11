@@ -1,0 +1,39 @@
+# SCRIPT BACKUP — Copy file hasil download & transkrip ke Google Drive
+# Paste di cell baru di Colab, jalankan, setelah itu hapus cell-nya.
+
+from google.colab import drive
+import os, shutil
+
+# Mount Google Drive jika belum
+try:
+    drive.mount('/content/drive', force_remount=True)
+except Exception as e:
+    print(f"[backup] Drive mount gagal: {e}")
+
+SRC_DIR = "/content/shorts_output"
+DEST_DIR = "/content/drive/MyDrive/shorts_backup"
+
+# Buat folder backup dengan timestamp
+import datetime
+ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+backup_dest = f"{DEST_DIR}/{ts}"
+os.makedirs(backup_dest, exist_ok=True)
+
+# List file yang ada di output dir
+files = os.listdir(SRC_DIR) if os.path.exists(SRC_DIR) else []
+video_files = [f for f in files if f.endswith(('.mp4', '.mkv', '.webm'))]
+srt_files = [f for f in files if f.endswith('.srt')]
+json_files = [f for f in files if f.endswith('.json')]
+
+print(f"[backup] Video files:  {video_files}")
+print(f"[backup] SRT files:   {srt_files}")
+print(f"[backup] JSON files:  {json_files}")
+
+# Copy semua ke backup
+for f in files:
+    src = os.path.join(SRC_DIR, f)
+    dst = os.path.join(backup_dest, f)
+    shutil.copy2(src, dst)
+
+print(f"[backup] Selesai → {backup_dest}/")
+print(f"[backup] Total {len(files)} file di-backup")

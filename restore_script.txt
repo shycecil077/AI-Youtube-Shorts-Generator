@@ -1,0 +1,46 @@
+# SCRIPT RESTORE — Kembalikan file backup ke shorts_output
+# Paste di cell baru di Colab, jalankan, setelah itu hapus cell-nya.
+
+from google.colab import drive
+import os, shutil
+
+try:
+    drive.mount('/content/drive', force_remount=True)
+except Exception as e:
+    print(f"[restore] Drive mount gagal: {e}")
+
+BACKUP_DIR = "/content/drive/MyDrive/shorts_backup"
+DEST_DIR = "/content/shorts_output"
+
+# List semua folder backup yang ada
+if not os.path.exists(BACKUP_DIR):
+    print(f"[restore] Folder backup tidak ditemukan: {BACKUP_DIR}")
+    exit()
+
+folders = sorted([d for d in os.listdir(BACKUP_DIR) if os.path.isdir(os.path.join(BACKUP_DIR, d))])
+
+if not folders:
+    print("[restore] Tidak ada folder backup ditemukan.")
+    exit()
+
+print(f"[restore] Folder backup tersedia:")
+for i, f in enumerate(folders):
+    files = os.listdir(os.path.join(BACKUP_DIR, f))
+    print(f"  [{i}] {f}  ({len(files)} files)")
+
+# Ambil folder terakhir (paling baru)
+chosen = folders[-1]
+src_dir = os.path.join(BACKUP_DIR, chosen)
+print(f"\n[restore] Menggunakan backup: {chosen}")
+
+# Copy semua file ke shorts_output
+os.makedirs(DEST_DIR, exist_ok=True)
+copied = 0
+for fname in os.listdir(src_dir):
+    src = os.path.join(src_dir, fname)
+    dst = os.path.join(DEST_DIR, fname)
+    shutil.copy2(src, dst)
+    copied += 1
+    print(f"  [+] {fname}")
+
+print(f"\n[restore] Selesai — {copied} file dikembalikan ke {DEST_DIR}/")

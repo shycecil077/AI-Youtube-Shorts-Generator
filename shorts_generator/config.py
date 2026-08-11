@@ -40,6 +40,11 @@ else:
         "speech_pad_ms": 400,
     }
 
+# Custom LLM endpoint (OpenAI-compatible APIs like OpenRouter, local Ollama, etc.)
+CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "").strip()
+CUSTOM_BASE_URL = os.getenv("CUSTOM_LLM_BASE_URL", "").strip()
+CUSTOM_MODEL = os.getenv("CUSTOM_MODEL", "").strip()
+
 
 def require_api_key() -> str:
     if not MUAPI_API_KEY:
