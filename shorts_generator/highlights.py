@@ -133,13 +133,30 @@ def _fix_truncated_json(text: str) -> str:
                     text = text[:j + 1] + '"'
                     break
     
-    # Add missing closing brackets FIRST, then braces (correct JSON order)
-    open_brackets = text.count('[') - text.count(']')
-    open_braces = text.count('{') - text.count('}')
-    for _ in range(open_brackets):
-        text += ']'
-    for _ in range(open_braces):
-        text += '}'
+    # Add missing closers in REVERSE order (innermost first)
+    # Count unclosed structures
+    stack = []
+    for ch in text:
+        if ch in '{[':
+            stack.append(ch)
+        elif ch == '}':
+            if stack and stack[-1] == '{':
+                stack.pop()
+            else:
+                stack.append('}')
+        elif ch == ']':
+            if stack and stack[-1] == '[':
+                stack.pop()
+            else:
+                stack.append(']')
+    
+    # Close any remaining open structures
+    while stack:
+        closing = stack.pop()
+        if closing == '{':
+            text += '}'
+        elif closing == '[':
+            text += ']'
     
     return text
 
