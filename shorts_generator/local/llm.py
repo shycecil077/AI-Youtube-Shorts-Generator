@@ -81,6 +81,7 @@ def call_custom_llm(prompt: str) -> str:
     response = client.chat.completions.create(
         model=model,
         temperature=0.7,
+        max_tokens=MAX_LLM_TOKENS,
         messages=[{"role": "user", "content": prompt}],
     )
     result = response.choices[0].message.content or ""
