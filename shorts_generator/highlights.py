@@ -61,11 +61,12 @@ Respond ONLY with valid JSON (no markdown, no explanation):
 {{"highlights":[{{"title":"string","start_time":float,"end_time":float,"score":int,"hook_sentence":"string","virality_reason":"string"}}]}}"""
 
 
-CHUNK_SIZE_SECONDS = 1200       # 20-min chunks for long videos
+CHUNK_SIZE_SECONDS = 600       # 10-min chunks (reduced for better LLM handling)
 LONG_VIDEO_THRESHOLD = 1800     # chunk videos longer than 30 min
 CHUNK_OVERLAP_SECONDS = 60
 GPT_CALL_TIMEOUT_SECONDS = 300  # cap LLM polls at 5 min — a wedged call should fail fast
 MAX_HIGHLIGHT_API_ATTEMPTS = 3
+MAX_LLM_TOKENS = 4096           # limit response tokens to avoid truncation
 
 
 def call_muapi_llm(prompt: str) -> str:
@@ -103,11 +104,29 @@ def _parse_json_loose(raw: str) -> Dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1:
+        pass
+    # Try to find a complete JSON object (handles truncation)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
             return json.loads(text[start:end + 1])
-        raise
+        except json.JSONDecodeError:
+            pass
+    # Try to find just the highlights array (most common case)
+    arr_start = text.find('["highlights"')
+    if arr_start == -1:
+        arr_start = text.find('"highlights"')
+    if arr_start != -1:
+        bracket = text.find('[', arr_start)
+        if bracket != -1:
+            brace_end = text.rfind("}")
+            if brace_end != -1:
+                try:
+                    return json.loads(text[bracket:brace_end + 1])
+                except json.JSONDecodeError:
+                    pass
+    raise
 
 
 def _coerce_float(value: object, default: float = 0.0) -> float:
