@@ -96,24 +96,73 @@ def call_muapi_llm(prompt: str) -> str:
     raise RuntimeError(f"Could not extract gpt-5-mini text from response: {result}")
 
 
+def _fix_truncated_json(text: str) -> str:
+    """Fix JSON that was truncated mid-response by closing open strings/braces."""
+    # Find last closing brace
+    last_brace = text.rfind("}")
+    if last_brace == -1:
+        return text
+    
+    # Work backwards from last brace to close any open structures
+    result = text[:last_brace + 1]
+    
+    # Count unclosed quotes after last complete token
+    in_string = False
+    escape_next = False
+    for i in range(len(result) - 1, -1, -1):
+        ch = result[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\':
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+        if not in_string:
+            break
+    
+    # If we're inside a string, close it
+    if in_string:
+        # Find the key this string belongs to
+        # Go back to find the colon after a key
+        search_from = len(result) - 1
+        while search_from >= 0 and result[search_from] in ' \t\n\r':
+            search_from -= 1
+        # We should be at : or ,
+        if search_from >= 0 and result[search_from] == ':':
+            # Find the key by going back to find "
+            key_start = search_from
+            while key_start >= 0 and result[key_start] != '"':
+                key_start -= 1
+            if key_start >= 0:
+                # Close the string value
+                result = result[:search_from + 1] + '"}'
+                return result
+    
+    return result
+
+
 def _parse_json_loose(raw: str) -> Dict:
-    """gpt-5-4 sometimes wraps JSON in markdown fences — strip and parse."""
+    """Parse JSON from LLM response, handling markdown fences and truncation."""
     text = raw.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
+    
+    # Try direct parse first
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Try to find a complete JSON object (handles truncation)
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        try:
-            return json.loads(text[start:end + 1])
-        except json.JSONDecodeError:
-            pass
-    # Try to find just the highlights array (most common case)
+    
+    # Try fixing truncation
+    fixed = _fix_truncated_json(text)
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+    
+    # Fallback: extract highlights array manually
     arr_start = text.find('["highlights"')
     if arr_start == -1:
         arr_start = text.find('"highlights"')
@@ -122,10 +171,14 @@ def _parse_json_loose(raw: str) -> Dict:
         if bracket != -1:
             brace_end = text.rfind("}")
             if brace_end != -1:
+                segment = text[bracket:brace_end + 1]
+                segment = _fix_truncated_json(segment)
                 try:
-                    return json.loads(text[bracket:brace_end + 1])
+                    parsed = json.loads(segment)
+                    return {"highlights": parsed if isinstance(parsed, list) else parsed.get("highlights", [])}
                 except json.JSONDecodeError:
                     pass
+    
     raise
 
 
